@@ -3,21 +3,9 @@ import numpy as np
 import time
 import json
 
-# ====================== Custom JSON Encoder for Numpy Types ======================
-class NumpyEncoder(json.JSONEncoder):
-    """Custom encoder to handle numpy types for JSON serialization"""
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, np.floating):
-            return float(obj)
-        if isinstance(obj, np.integer):
-            return int(obj)
-        return super(NumpyEncoder, self).default(obj)
-
 # ====================== Configuration (2D Only) ======================
 GAME_CONFIG = {
-    "window": {"width": 1200, "height": 600},
+    "window": {"width": 800, "height": 500},  # Optimized for Streamlit display
     "physics": {
         "friction": 0.98,
         "max_power": 100,
@@ -36,41 +24,59 @@ GAME_CONFIG = {
             "ball_border": "black",
             "power_meter": {0: "#3498db", 50: "#f1c40f", 80: "#e74c3c", 100: "#c0392b"}
         },
-        "power_meter": {"width": 300, "height": 30, "y_pos": 50},
+        "power_meter": {"width": 200, "height": 25, "y_pos": 30},
         "hit_feedback": {"scale": 1.2, "color": "#ffdd00", "duration": 0.1}
     },
     "levels": [
-        {"tee": (100, 300), "hole": (1000, 300), "obstacles": [(500, 200, 100, 100)], "par": 3},
-        {"tee": (100, 100), "hole": (900, 500), "obstacles": [(300, 300, 80, 80), (600, 200, 120, 120)], "par": 4},
-        {"tee": (100, 500), "hole": (1100, 100), "obstacles": [(200, 200, 60, 60), (400, 400, 90, 90), (700, 300, 70, 70)], "par": 5},
+        {"tee": (80, 250), "hole": (700, 250), "obstacles": [(400, 200, 80, 80)], "par": 3},
+        {"tee": (80, 100), "hole": (700, 400), "obstacles": [(250, 150, 60, 60), (500, 250, 100, 60)], "par": 4},
+        {"tee": (80, 400), "hole": (700, 100), "obstacles": [(200, 200, 70, 70), (400, 100, 80, 80), (550, 300, 70, 70)], "par": 5},
     ]
 }
 
 # ====================== Initial Setup ======================
 st.set_page_config(
     page_title="2D Golf Game",
-    layout="wide",
+    layout="centered",  # Changed from wide to centered for better display
     initial_sidebar_state="collapsed",
 )
 
-# Hide default Streamlit UI
+# Custom CSS for perfect screen display
 hide_st_style = """
     <style>
+    /* Hide default Streamlit elements */
     #MainMenu, footer, header {visibility: hidden;}
-    .block-container {padding: 1rem !important;}
+    
+    /* Main container styling */
+    .block-container {
+        padding: 1rem 2rem !important;
+        max-width: 900px !important;
+        margin: 0 auto !important;
+    }
+    
+    /* Game container - responsive and properly sized */
     .game-container {
         position: relative;
         width: 100%;
-        height: 600px;
+        max-width: 800px;
+        height: 500px;
         background-color: #8CC051;
-        border: 1px solid #6A9030;
+        border: 3px solid #6A9030;
+        border-radius: 10px;
         overflow: hidden;
+        margin: 0 auto;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
+    
+    /* Obstacles (sand traps) */
     .obstacle {
         position: absolute;
         background-color: #F4D35E;
         border: 2px solid #E0C040;
+        border-radius: 4px;
     }
+    
+    /* Hole */
     .hole {
         position: absolute;
         width: 20px;
@@ -79,7 +85,10 @@ hide_st_style = """
         background-color: #3A2E1F;
         border: 2px solid #2A1F10;
         transform: translate(-50%, -50%);
+        box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
     }
+    
+    /* Golf ball */
     .ball {
         position: absolute;
         width: 10px;
@@ -89,7 +98,10 @@ hide_st_style = """
         border: 1px solid black;
         transform: translate(-50%, -50%);
         z-index: 10;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
+    
+    /* Ball hit feedback */
     .ball-feedback {
         position: absolute;
         width: 12px;
@@ -99,24 +111,31 @@ hide_st_style = """
         border: 1px solid black;
         transform: translate(-50%, -50%);
         z-index: 10;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
+    
+    /* Power meter */
     .power-meter {
         position: absolute;
         bottom: 20px;
         left: 50%;
         transform: translateX(-50%);
-        width: 300px;
-        height: 30px;
+        width: 200px;
+        height: 25px;
         background-color: #ecf0f1;
         border: 2px solid #bdc3c7;
-        border-radius: 5px;
+        border-radius: 15px;
         overflow: hidden;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
+    
     .power-fill {
         height: 100%;
         width: 0%;
         transition: width 0.1s linear;
+        border-radius: 13px;
     }
+    
     .power-text {
         position: absolute;
         bottom: 25px;
@@ -126,38 +145,75 @@ hide_st_style = """
         font-weight: bold;
         font-size: 14px;
         z-index: 15;
+        background-color: rgba(255,255,255,0.8);
+        padding: 2px 10px;
+        border-radius: 10px;
     }
+    
+    /* Game info display */
     .game-info {
         position: absolute;
-        top: 10px;
+        top: 15px;
         left: 50%;
         transform: translateX(-50%);
         background-color: white;
-        padding: 5px 15px;
+        padding: 8px 20px;
         border-radius: 20px;
         font-size: 14px;
         font-weight: bold;
         z-index: 20;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        text-align: center;
     }
+    
+    /* Responsive adjustments for mobile */
+    @media (max-width: 768px) {{
+        .game-container {{
+            height: 400px;
+            border-radius: 8px;
+        }}
+        .game-info {{
+            font-size: 12px;
+            padding: 6px 15px;
+            top: 10px;
+        }}
+        .power-meter {{
+            width: 180px;
+            height: 20px;
+        }}
+        .power-text {{
+            font-size: 12px;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        .game-container {{
+            height: 300px;
+        }}
+        .game-info {{
+            font-size: 11px;
+            padding: 5px 10px;
+            width: 90%;
+        }}
+        .power-meter {{
+            width: 150px;
+        }}
+    }}
     </style>
 """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# ====================== Game State Initialization (Use Python Lists Instead of Numpy Arrays) ======================
+# ====================== Game State Initialization ======================
 if "game_state" not in st.session_state:
-    # Use standard Python lists instead of numpy arrays for JSON compatibility
     st.session_state.game_state = {
         "level": 0,
-        "ball_pos": list(GAME_CONFIG["levels"][0]["tee"]),  # [x, y] as list
-        "hole_pos": list(GAME_CONFIG["levels"][0]["hole"]),  # [x, y] as list
+        "ball_pos": list(GAME_CONFIG["levels"][0]["tee"]),
+        "hole_pos": list(GAME_CONFIG["levels"][0]["hole"]),
         "obstacles": GAME_CONFIG["levels"][0]["obstacles"],
         "par": GAME_CONFIG["levels"][0]["par"],
         "strokes": 0,
-        "drag_start": None,
-        "drag_end": None,
         "current_power": 0.0,
-        "ball_velocity": [0.0, 0.0],  # [x, y] velocity as list
+        "ball_velocity": [0.0, 0.0],
         "is_rolling": False,
         "level_complete": False,
         "last_update": time.time(),
@@ -168,7 +224,7 @@ if "game_state" not in st.session_state:
         "progress": {"completed_levels": []}
     }
 
-# ====================== Core Functions ======================
+# ====================== Core Game Functions ======================
 def reset_level(level_idx):
     """Reset game state for specified level"""
     gs = st.session_state.game_state
@@ -176,7 +232,6 @@ def reset_level(level_idx):
     if level_idx > 0 and level_idx - 1 not in gs["progress"]["completed_levels"]:
         gs["progress"]["completed_levels"].append(level_idx - 1)
     
-    # Use lists instead of numpy arrays for JSON compatibility
     gs.update({
         "level": level_idx,
         "ball_pos": list(GAME_CONFIG["levels"][level_idx]["tee"]),
@@ -188,8 +243,6 @@ def reset_level(level_idx):
         "ball_velocity": [0.0, 0.0],
         "is_rolling": False,
         "level_complete": False,
-        "drag_start": None,
-        "drag_end": None,
         "last_update": time.time(),
         "wind": float(np.random.uniform(*GAME_CONFIG["physics"]["wind_strength"])),
         "hit_feedback": False
@@ -219,20 +272,12 @@ def get_power_color(power_percent):
             return f"#{r:02x}{g:02x}{b:02x}"
     return colors[100]
 
-def snap_to_angle(direction):
-    """Snap drag direction to 15° increments (using lists instead of numpy)"""
-    dx, dy = direction
-    angle = np.degrees(np.arctan2(dy, dx))
-    snapped_angle = round(angle / 15) * 15
-    rad = np.radians(snapped_angle)
-    return [np.cos(rad), np.sin(rad)]
-
 def calculate_distance(pos1, pos2):
-    """Calculate distance between two points (list format)"""
+    """Calculate distance between two points"""
     return np.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
 
 def check_collision(pos, obstacles):
-    """2D collision detection (using lists)"""
+    """2D collision detection"""
     x, y = pos
     ball_radius = GAME_CONFIG["physics"]["ball_radius"]
     for (ox, oy, w, h) in obstacles:
@@ -242,13 +287,13 @@ def check_collision(pos, obstacles):
     return False
 
 def check_hole(pos, hole_pos):
-    """2D hole detection (using lists)"""
+    """2D hole detection"""
     ball_radius = GAME_CONFIG["physics"]["ball_radius"]
     hole_radius = GAME_CONFIG["physics"]["hole_radius"]
     return calculate_distance(pos, hole_pos) < (hole_radius + ball_radius)
 
 def update_ball():
-    """Update ball position with 2D physics (using lists instead of numpy arrays)"""
+    """Update ball position with 2D physics"""
     gs = st.session_state.game_state
     
     # Check if ball has stopped rolling
@@ -289,15 +334,15 @@ def update_ball():
         gs["level_complete"] = True
         gs["is_rolling"] = False
 
-# ====================== Main Game Rendering ======================
+# ====================== Game Rendering ======================
 def render_game():
-    """Render game using native Streamlit/HTML (no matplotlib)"""
+    """Render game with perfect screen display"""
     gs = st.session_state.game_state
     
-    # Game container
+    # Main game container
     st.markdown('<div class="game-container" id="game-container">', unsafe_allow_html=True)
     
-    # Render obstacles
+    # Render obstacles (sand traps)
     for i, (ox, oy, w, h) in enumerate(gs["obstacles"]):
         st.markdown(
             f'<div class="obstacle" style="left: {ox}px; top: {oy}px; width: {w}px; height: {h}px;"></div>',
@@ -311,25 +356,21 @@ def render_game():
         unsafe_allow_html=True
     )
     
-    # Render ball (with feedback effect)
+    # Render ball with hit feedback
     ball_x, ball_y = gs["ball_pos"]
     if gs["hit_feedback"]:
-        # Check if feedback duration expired
         if time.time() - gs["hit_feedback_start"] > GAME_CONFIG["visuals"]["hit_feedback"]["duration"]:
             gs["hit_feedback"] = False
-            # Normal ball
             st.markdown(
                 f'<div class="ball" style="left: {ball_x}px; top: {ball_y}px;"></div>',
                 unsafe_allow_html=True
             )
         else:
-            # Feedback ball
             st.markdown(
                 f'<div class="ball-feedback" style="left: {ball_x}px; top: {ball_y}px;"></div>',
                 unsafe_allow_html=True
             )
     else:
-        # Normal ball
         st.markdown(
             f'<div class="ball" style="left: {ball_x}px; top: {ball_y}px;"></div>',
             unsafe_allow_html=True
@@ -347,15 +388,14 @@ def render_game():
         unsafe_allow_html=True
     )
     
-    # Game info text
+    # Game info display
     info_text = []
     info_text.append(f"Level: {gs['level']+1} | Strokes: {gs['strokes']} | Par: {gs['par']}")
     info_text.append(f"Wind: {gs['wind']:.1f} m/s")
-    info_text.append(f"Completed Levels: {len(gs['progress']['completed_levels'])}")
     
     if gs["level_complete"]:
-        info_text[0] += f" | Completed! (Par {gs['par']}, You: {gs['strokes']})"
-        info_text[0] += " | Next Level →" if gs["level"] < len(GAME_CONFIG["levels"])-1 else " | Game Complete!"
+        info_text[0] = f"Level {gs['level']+1} Complete! | Strokes: {gs['strokes']} (Par: {gs['par']})"
+        info_text.append("🎉 Hole in! 🎉")
     
     st.markdown(
         f'<div class="game-info">{" | ".join(info_text)}</div>',
@@ -364,160 +404,56 @@ def render_game():
     
     # Close game container
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Safe JSON serialization (using our custom encoder)
-    game_state_serialized = json.dumps(gs, cls=NumpyEncoder)
-    
-    # JavaScript for game interaction (simplified for Streamlit compatibility)
-    js_code = f"""
-    <script>
-    const gameContainer = document.getElementById('game-container');
-    let isDragging = false;
-    let dragStart = {{x: 0, y: 0}};
-    
-    // Game state (safely serialized)
-    const gameState = {game_state_serialized};
-    const UPDATE_INTERVAL = {1/60 * 1000};
-    
-    // Get ball element
-    function getBallElement() {{
-        return document.querySelector('.ball') || document.querySelector('.ball-feedback');
-    }}
-    
-    // Handle mouse down/touch start
-    gameContainer.addEventListener('mousedown', function(e) {{
-        if (gameState.is_rolling || gameState.level_complete) return;
-        
-        isDragging = true;
-        const rect = gameContainer.getBoundingClientRect();
-        dragStart = {{
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        }};
-        
-        // Send drag start to Streamlit (via rerun)
-        window.parent.postMessage({{
-            type: 'drag_start',
-            x: dragStart.x,
-            y: dragStart.y
-        }}, '*');
-    }});
-    
-    // Handle mouse move/touch move
-    gameContainer.addEventListener('mousemove', function(e) {{
-        if (!isDragging || gameState.is_rolling || gameState.level_complete) return;
-        
-        const rect = gameContainer.getBoundingClientRect();
-        const currentPos = {{
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        }};
-        
-        // Calculate drag distance for power
-        const dx = dragStart.x - currentPos.x;
-        const dy = dragStart.y - currentPos.y;
-        const distance = Math.sqrt(dx*dx + dy*dy);
-        const power = Math.min(distance / {GAME_CONFIG["physics"]["max_power"]} * 100, 100);
-        
-        // Update power meter visually
-        const powerFill = document.querySelector('.power-fill');
-        const powerText = document.querySelector('.power-text');
-        if (powerFill && powerText) {{
-            powerFill.style.width = power + '%';
-            powerText.textContent = `Power: ${{Math.round(power)}}%`;
-            
-            // Update color
-            if (power > 90) {{
-                powerFill.style.backgroundColor = gameState.flash_state ? '#ff0000' : '{get_power_color(gs['current_power'])}';
-            }} else {{
-                powerFill.style.backgroundColor = '{get_power_color(gs['current_power'])}';
-            }}
-        }}
-        
-        // Send drag move to Streamlit
-        window.parent.postMessage({{
-            type: 'drag_move',
-            x: currentPos.x,
-            y: currentPos.y,
-            power: power
-        }}, '*');
-    }});
-    
-    // Handle mouse up/touch end
-    gameContainer.addEventListener('mouseup', function(e) {{
-        if (!isDragging || gameState.is_rolling || gameState.level_complete) return;
-        
-        isDragging = false;
-        const rect = gameContainer.getBoundingClientRect();
-        const endPos = {{
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        }};
-        
-        // Calculate shot power and direction
-        const dx = dragStart.x - endPos.x;
-        const dy = dragStart.y - endPos.y;
-        const distance = Math.sqrt(dx*dx + dy*dy);
-        const power = Math.min(distance / {GAME_CONFIG["physics"]["max_power"]} * 10, 10);
-        
-        // Send shot command to Streamlit
-        window.parent.postMessage({{
-            type: 'shot',
-            dx: dx,
-            dy: dy,
-            power: power
-        }}, '*');
-        
-        // Reset power meter
-        const powerFill = document.querySelector('.power-fill');
-        const powerText = document.querySelector('.power-text');
-        if (powerFill && powerText) {{
-            powerFill.style.width = '0%';
-            powerText.textContent = 'Power: 0%';
-        }}
-    }});
-    
-    // Update game state periodically
-    setInterval(() => {{
-        window.parent.postMessage({{type: 'game_update'}}, '*');
-    }}, UPDATE_INTERVAL);
-    </script>
-    """
-    st.components.v1.html(js_code, height=0)
 
 # ====================== Main Game Logic ======================
 def main():
+    # Set page title
+    st.title("🏌️ 2D Golf Game")
+    
     gs = st.session_state.game_state
     current_time = time.time()
     
     # Game update loop (60fps)
     UPDATE_INTERVAL = 1 / 60
     if current_time - gs["last_update"] >= UPDATE_INTERVAL:
-        # Update ball physics if rolling
         if gs["is_rolling"]:
             update_ball()
         
-        # Toggle flash state for power meter
+        # Flash effect for high power
         if gs["current_power"] > 90:
             gs["flash_state"] = not gs["flash_state"]
         
         gs["last_update"] = current_time
     
-    # Render game
+    # Render the game with perfect screen layout
     render_game()
     
-    # Handle shot from user input (simplified for Streamlit)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        # Manual shot control (works around Streamlit's interaction model)
+    # Game controls in a clean layout
+    st.markdown("---")
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("Game Controls")
+        st.write("Adjust the sliders to aim and set power for your shot!")
+        
+        # Game control sliders (responsive)
         if not gs["is_rolling"] and not gs["level_complete"]:
-            st.markdown("### Take a Shot")
-            power = st.slider("Power", 0, 100, 50, key=f"power_slider_{gs['strokes']}")
-            direction_x = st.slider("Direction X", -10, 10, 5, key=f"dir_x_{gs['strokes']}")
-            direction_y = st.slider("Direction Y", -10, 10, 0, key=f"dir_y_{gs['strokes']}")
+            col_slider1, col_slider2 = st.columns(2)
             
-            if st.button("Hit Ball", use_container_width=True):
-                # Calculate velocity based on power and direction
+            with col_slider1:
+                power = st.slider("Shot Power", 0, 100, 50, key="power", 
+                                 help="0 = soft, 100 = maximum power")
+                direction_x = st.slider("Horizontal Direction", -10, 10, 5, key="dir_x",
+                                       help="-10 = left, 10 = right")
+            
+            with col_slider2:
+                direction_y = st.slider("Vertical Direction", -10, 10, 0, key="dir_y",
+                                       help="-10 = up, 10 = down")
+                wind_info = st.info(f"Current Wind: {gs['wind']:.1f} m/s (affects horizontal movement)")
+            
+            # Hit ball button
+            if st.button("⛳ Hit Ball", use_container_width=True, type="primary"):
+                gs["current_power"] = power
                 power_scaled = power / 100 * 10
                 gs["ball_velocity"] = [
                     direction_x * power_scaled / 10,
@@ -528,31 +464,48 @@ def main():
                 gs["hit_feedback"] = True
                 gs["hit_feedback_start"] = time.time()
         
-        # Level completion handling
+        # Level completion
         if gs["level_complete"]:
-            st.success(f"Level {gs['level']+1} Complete!")
-            if gs["level"] < len(GAME_CONFIG["levels"])-1:
-                if st.button("Next Level", use_container_width=True):
-                    reset_level(gs["level"] + 1)
-            else:
-                st.balloons()
-                st.success("Congratulations! You completed all levels!")
-                if st.button("Play Again", use_container_width=True):
+            st.success(f"🏆 Level {gs['level']+1} Completed!")
+            st.write(f"You took {gs['strokes']} strokes (Par: {gs['par']})")
+            
+            col_buttons = st.columns(2)
+            with col_buttons[0]:
+                if gs["level"] < len(GAME_CONFIG["levels"])-1:
+                    if st.button("▶️ Next Level", use_container_width=True):
+                        reset_level(gs["level"] + 1)
+                else:
+                    st.balloons()
+                    st.success("🎊 Congratulations! You completed all levels! 🎊")
+            
+            with col_buttons[1]:
+                if st.button("🔄 Play Again", use_container_width=True):
                     reset_level(0)
+    
+    with col2:
+        # Game info and actions
+        st.subheader("Game Actions")
         
-        # Game controls
-        st.markdown("### Game Controls")
-        st.write("• Use sliders to set power and direction")
-        st.write("• Click 'Hit Ball' to shoot")
-        st.write("• Wind affects ball horizontally")
-        st.write("• Avoid sand traps!")
-        
-        # Reset button
-        if st.button("Reset Ball to Tee", use_container_width=True):
+        # Reset ball button
+        if st.button("🔙 Reset Ball to Tee", use_container_width=True):
             gs["ball_pos"] = list(GAME_CONFIG["levels"][gs["level"]]["tee"])
             gs["ball_velocity"] = [0.0, 0.0]
             gs["is_rolling"] = False
-    
+        
+        # Level selector
+        st.subheader("Level Selector")
+        level_options = [f"Level {i+1}" for i in range(len(GAME_CONFIG["levels"]))]
+        selected_level = st.selectbox("Jump to Level", level_options, index=gs["level"])
+        
+        if st.button("Go to Level", use_container_width=True):
+            new_level = int(selected_level.split()[1]) - 1
+            reset_level(new_level)
+        
+        # Game stats
+        st.subheader("Game Stats")
+        st.write(f"Completed Levels: {len(gs['progress']['completed_levels'])}/{len(GAME_CONFIG['levels'])}")
+        st.write(f"Total Strokes: {gs['strokes']}")
+        
     # Auto-rerun to update game state
     st.experimental_rerun()
 
