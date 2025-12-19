@@ -45,7 +45,7 @@ def next_level():
         "y": random.randint(50, 350)
     }
 
-# Fixed HTML/CSS/JS for the golf game (properly escaped JS syntax)
+# Fixed HTML/CSS/JS with AIM LINE feature
 golf_game_html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -133,12 +133,54 @@ golf_game_html = f"""
             border-radius: 5px;
             box-shadow: 0 3px 8px rgba(0,0,0,0.3);
         }}
+        
+        /* AIM LINE STYLES */
+        .aim-line {{
+            position: absolute;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 2px;
+            z-index: 8;
+            transform-origin: left center;
+            pointer-events: none; /* Prevent line from interfering with drag */
+            box-shadow: 0 0 5px rgba(255, 255, 0, 0.8);
+        }}
+        
+        .aim-dot {{
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: rgba(255, 0, 0, 0.8);
+            border-radius: 50%;
+            z-index: 9;
+            pointer-events: none;
+        }}
+        
+        /* Hole target indicator */
+        .hole-target {{
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border: 2px dashed rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            z-index: 4;
+            transform: translate(-50%, -50%);
+            left: {st.session_state.hole_position['x'] + 20}px;
+            top: {st.session_state.hole_position['y'] + 20}px;
+        }}
     </style>
 </head>
 <body>
     <div class="golf-course" id="course">
         <div class="golf-ball" id="ball" style="left: {st.session_state.ball_position['x']}px; top: {st.session_state.ball_position['y']}px;"></div>
         <div class="golf-hole" id="hole" style="left: {st.session_state.hole_position['x']}px; top: {st.session_state.hole_position['y']}px;"></div>
+        
+        <!-- Hole target indicator -->
+        <div class="hole-target"></div>
+        
+        <!-- AIM LINE ELEMENTS -->
+        <div class="aim-line" id="aimLine"></div>
+        <div class="aim-dot" id="aimDot"></div>
         
         <!-- Obstacles (random for each level) -->
         <div class="obstacle" style="width: {50 + st.session_state.level * 10}px; height: {30 + st.session_state.level * 5}px; left: {random.randint(200, 600)}px; top: {random.randint(150, 350)}px;"></div>
@@ -151,7 +193,8 @@ golf_game_html = f"""
         <div class="game-info">
             Level: {st.session_state.level}<br>
             Strokes: {st.session_state.strokes}<br>
-            Score: {st.session_state.score}
+            Score: {st.session_state.score}<br>
+            <small style="font-weight:normal; color:#555;">Drag ball + aim line to hole!</small>
         </div>
     </div>
 
@@ -161,6 +204,8 @@ golf_game_html = f"""
         const hole = document.getElementById('hole');
         const course = document.getElementById('course');
         const powerBar = document.getElementById('powerBar');
+        const aimLine = document.getElementById('aimLine');
+        const aimDot = document.getElementById('aimDot');
         
         // Game variables
         let isDragging = false;
@@ -174,6 +219,10 @@ golf_game_html = f"""
         let velocityX = 0;
         let velocityY = 0;
         let isMoving = false;
+        
+        // Hide aim line initially
+        aimLine.style.display = 'none';
+        aimDot.style.display = 'none';
         
         // Start drag - FIXED: Properly quoted object literals for event listeners
         ball.addEventListener('mousedown', startDrag);
@@ -197,6 +246,10 @@ golf_game_html = f"""
             power = 0;
             powerBar.style.width = '0%';
             
+            // Show aim line
+            aimLine.style.display = 'block';
+            aimDot.style.display = 'block';
+            
             // Prevent text selection
             e.preventDefault();
         }}
@@ -217,6 +270,46 @@ golf_game_html = f"""
             // Update power bar (capped at maxPower)
             power = Math.min(dragDistance, maxPower);
             powerBar.style.width = (power / maxPower) * 100 + '%';
+            
+            // Calculate aim line properties
+            updateAimLine(deltaX, deltaY, power);
+        }}
+        
+        // Update aim line to show shot trajectory
+        function updateAimLine(deltaX, deltaY, power) {{
+            if (power === 0) {{
+                aimLine.style.display = 'none';
+                aimDot.style.display = 'none';
+                return;
+            }}
+            
+            // Get ball position
+            const ballRect = ball.getBoundingClientRect();
+            const courseRect = course.getBoundingClientRect();
+            const ballX = ballRect.left - courseRect.left + ballRect.width / 2;
+            const ballY = ballRect.top - courseRect.top + ballRect.height / 2;
+            
+            // Calculate angle and length of aim line
+            const angle = Math.atan2(deltaY, deltaX);
+            const lineLength = (power / maxPower) * 200; // Max 200px line length
+            
+            // Calculate end point of aim line
+            const endX = ballX + Math.cos(angle) * lineLength;
+            const endY = ballY + Math.sin(angle) * lineLength;
+            
+            // Set aim line position and rotation
+            aimLine.style.left = ballX + 'px';
+            aimLine.style.top = ballY + 'px';
+            aimLine.style.width = lineLength + 'px';
+            aimLine.style.transform = `rotate(${angle}rad)`;
+            
+            // Position aim dot at end of line
+            aimDot.style.left = endX - 4 + 'px';
+            aimDot.style.top = endY - 4 + 'px';
+            
+            // Show aim line elements
+            aimLine.style.display = 'block';
+            aimDot.style.display = 'block';
         }}
         
         function endDrag(e) {{
@@ -224,6 +317,10 @@ golf_game_html = f"""
             
             isDragging = false;
             powerBar.style.width = '0%';
+            
+            // Hide aim line after release
+            aimLine.style.display = 'none';
+            aimDot.style.display = 'none';
             
             // Calculate direction (opposite of drag)
             const endX = e.type === 'touchend' ? e.changedTouches[0].clientX : e.clientX;
@@ -348,6 +445,11 @@ golf_game_html = f"""
                 ball.style.top = '400px';
                 hole.style.left = '{random.randint(300, 700)}px';
                 hole.style.top = '{random.randint(100, 300)}px';
+                // Update hole target position
+                document.querySelector('.hole-target').style.left = 
+                    (parseInt(hole.style.left) + 20) + 'px';
+                document.querySelector('.hole-target').style.top = 
+                    (parseInt(hole.style.top) + 20) + 'px';
                 velocityX = 0;
                 velocityY = 0;
                 isMoving = false;
@@ -359,12 +461,13 @@ golf_game_html = f"""
 """
 
 # Streamlit UI
-st.title("⛳ Drag & Drop Golf Game")
+st.title("⛳ Drag & Drop Golf Game (With Aim Line)")
 st.markdown("### How to Play:")
-st.markdown("1. Drag the golf ball backward to aim (the farther you drag, the more power)")
-st.markdown("2. Release to hit the ball toward the hole")
-st.markdown("3. Avoid obstacles and get the ball in the hole with as few strokes as possible")
-st.markdown("4. Each level gets harder with more obstacles!")
+st.markdown("1. **Drag the golf ball backward** to aim (the aim line shows your shot trajectory)")
+st.markdown("2. **Aim line length** = shot power (longer line = more power)")
+st.markdown("3. **Red dot** on aim line shows where the ball will land (approximate)")
+st.markdown("4. Release to hit the ball toward the hole (white dashed circle)")
+st.markdown("5. Avoid obstacles and get the ball in the hole with as few strokes as possible")
 
 # Create two columns for game and controls
 col1, col2 = st.columns([3, 1])
@@ -388,6 +491,7 @@ with col2:
         next_level()
         st.rerun()
     
+    st.success("🎯 Aim line helps you target the hole!")
     st.info("🏆 Score more points by getting the ball in the hole with fewer strokes!")
     st.warning("⚠️ Obstacles will bounce your ball - aim carefully!")
 
@@ -460,10 +564,16 @@ components.html(f"""
 
 # Game instructions
 st.markdown("---")
-st.subheader("Game Rules")
+st.subheader("Game Rules & Aim Line Tips")
 st.markdown("""
-- **Par**: Each level has a par (3 + level number) - try to get the ball in the hole in par or fewer strokes for maximum points
-- **Power**: The farther you drag the ball back, the more power your shot has
-- **Obstacles**: Trees (brown rectangles) will bounce your ball - plan your shots around them
-- **Scoring**: 100 points for par, 80 points for 1 over par, 60 for 2 over, etc. (minimum 10 points)
+### New Features:
+- **Aim Line**: White/yellow line showing shot direction (appears when dragging the ball)
+- **Power Indicator**: Line length = shot power (longer = farther shot)
+- **Target Dot**: Red dot at end of aim line shows approximate landing spot
+- **Hole Marker**: White dashed circle around the hole for better visibility
+
+### Scoring:
+- **Par**: Each level has a par (3 + level number) - try to get the ball in the hole in par or fewer strokes
+- **100 points** for par, 80 points for 1 over par, 60 for 2 over, minimum 10 points
+- Obstacles (brown rectangles) bounce the ball - use the aim line to plan around them!
 """)
