@@ -2,63 +2,88 @@ import streamlit as st
 import streamlit.components.v1 as components
 import random
 
-# Set page config
+# Set page config first (critical for Streamlit)
 st.set_page_config(
     page_title="Drag & Drop Golf Game",
     page_icon="⛳",
     layout="wide"
 )
 
-# Game state management
-if 'score' not in st.session_state:
-    st.session_state.score = 0
-if 'strokes' not in st.session_state:
-    st.session_state.strokes = 0
-if 'level' not in st.session_state:
-    st.session_state.level = 1
-if 'ball_position' not in st.session_state:
-    st.session_state.ball_position = {"x": 100, "y": 400}
-if 'hole_position' not in st.session_state:
-    st.session_state.hole_position = {
-        "x": random.randint(300, 700),
-        "y": random.randint(100, 300)
+# --------------------------
+# Game State Management (Fixed initialization order)
+# --------------------------
+def init_session_state():
+    default_state = {
+        "score": 0,
+        "strokes": 0,
+        "level": 1,
+        "ball_position": {"x": 100, "y": 400},
+        "hole_position": {"x": random.randint(300, 700), "y": random.randint(100, 300)},
+        "game_over": False,
+        "level_complete": False  # New state for level transition
     }
+    
+    for key, value in default_state.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
-# Reset game function
+# Initialize state before any operations
+init_session_state()
+
+# --------------------------
+# Core Game Functions (Fixed logic)
+# --------------------------
 def reset_game():
+    """Full game reset to level 1"""
     st.session_state.score = 0
     st.session_state.strokes = 0
     st.session_state.level = 1
     st.session_state.ball_position = {"x": 100, "y": 400}
-    st.session_state.hole_position = {
-        "x": random.randint(300, 700),
-        "y": random.randint(100, 300)
-    }
+    st.session_state.hole_position = {"x": random.randint(300, 700), "y": random.randint(100, 300)}
+    st.session_state.game_over = False
+    st.session_state.level_complete = False
 
-# Next level function
 def next_level():
+    """Advance to next level (with max level check)"""
+    if st.session_state.level >= 10:
+        st.session_state.game_over = True
+        return
+    
+    # Increment level and reset position/strokes
     st.session_state.level += 1
     st.session_state.strokes = 0
     st.session_state.ball_position = {"x": 100, "y": 400}
     st.session_state.hole_position = {
-        "x": random.randint(400, 800),
+        "x": random.randint(400, 800),  # Harder positions for higher levels
         "y": random.randint(50, 350)
     }
+    st.session_state.level_complete = False
 
-# Fully fixed HTML/CSS/JS with AIM LINE (no template literals)
+def calculate_score(current_strokes, level):
+    """Fixed scoring logic (par calculation)"""
+    par = 3 + level  # Par increases with level
+    score_gain = max(100 - ((current_strokes - par) * 20), 10)  # Min 10 points
+    return score_gain
+
+# --------------------------
+# Auto Level Transition (Fixed trigger logic)
+# --------------------------
+if st.session_state.level_complete:
+    # Auto-advance to next level after brief delay
+    next_level()
+    st.rerun()  # Critical for immediate UI update
+
+# --------------------------
+# HTML/JS Game Interface (Fixed critical bugs)
+# --------------------------
 golf_game_html = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drag & Drop Golf Game</title>
     <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         
         .golf-course {{
             position: relative;
@@ -134,7 +159,6 @@ golf_game_html = f"""
             box-shadow: 0 3px 8px rgba(0,0,0,0.3);
         }}
         
-        /* AIM LINE STYLES */
         .aim-line {{
             position: absolute;
             height: 3px;
@@ -142,7 +166,7 @@ golf_game_html = f"""
             border-radius: 2px;
             z-index: 8;
             transform-origin: left center;
-            pointer-events: none; /* Prevent line from interfering with drag */
+            pointer-events: none;
             box-shadow: 0 0 5px rgba(255, 255, 0, 0.8);
         }}
         
@@ -156,7 +180,6 @@ golf_game_html = f"""
             pointer-events: none;
         }}
         
-        /* Hole target indicator */
         .hole-target {{
             position: absolute;
             width: 50px;
@@ -168,23 +191,46 @@ golf_game_html = f"""
             left: {st.session_state.hole_position['x'] + 20}px;
             top: {st.session_state.hole_position['y'] + 20}px;
         }}
+        
+        /* Fixed level complete popup (z-index + animation) */
+        .level-complete {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 40px 70px;
+            border-radius: 20px;
+            font-family: Arial, sans-serif;
+            font-size: 28px;
+            font-weight: bold;
+            z-index: 9999;  /* Ensure it's on top */
+            text-align: center;
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+            border: 3px solid #FFC107;
+        }}
+        
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translate(-50%, -45%); }}
+            to {{ opacity: 1; transform: translate(-50%, -50%); }}
+        }}
     </style>
 </head>
 <body>
     <div class="golf-course" id="course">
         <div class="golf-ball" id="ball" style="left: {st.session_state.ball_position['x']}px; top: {st.session_state.ball_position['y']}px;"></div>
         <div class="golf-hole" id="hole" style="left: {st.session_state.hole_position['x']}px; top: {st.session_state.hole_position['y']}px;"></div>
-        
-        <!-- Hole target indicator -->
         <div class="hole-target"></div>
-        
-        <!-- AIM LINE ELEMENTS -->
         <div class="aim-line" id="aimLine"></div>
         <div class="aim-dot" id="aimDot"></div>
         
-        <!-- Obstacles (random for each level) -->
-        <div class="obstacle" style="width: {50 + st.session_state.level * 10}px; height: {30 + st.session_state.level * 5}px; left: {random.randint(200, 600)}px; top: {random.randint(150, 350)}px;"></div>
-        <div class="obstacle" style="width: {40 + st.session_state.level * 8}px; height: {40 + st.session_state.level * 6}px; left: {random.randint(300, 700)}px; top: {random.randint(100, 400)}px;"></div>
+        <!-- Dynamic obstacles (1 per level, max 10) -->
+        {''.join([
+            f'<div class="obstacle" style="width: {50 + st.session_state.level * 8}px; height: {30 + st.session_state.level * 5}px; left: {random.randint(200, 800)}px; top: {random.randint(50, 450)}px;"></div>'
+            for _ in range(min(st.session_state.level, 10))
+        ])}
         
         <div class="power-indicator">
             <div class="power-bar" id="powerBar"></div>
@@ -193,89 +239,86 @@ golf_game_html = f"""
         <div class="game-info">
             Level: {st.session_state.level}<br>
             Strokes: {st.session_state.strokes}<br>
-            Score: {st.session_state.score}<br>
-            <small style="font-weight:normal; color:#555;">Drag ball + aim line to hole!</small>
+            Score: {st.session_state.score}
+        </div>
+        
+        <!-- Fixed level complete popup -->
+        <div class="level-complete" id="levelComplete">
+            LEVEL {st.session_state.level} COMPLETE!<br>
+            <span style="font-size: 18px; margin-top: 10px; display: block;">Next Level Loading...</span>
         </div>
     </div>
 
     <script>
-        // Game elements
+        // Core elements (fixed selection)
         const ball = document.getElementById('ball');
         const hole = document.getElementById('hole');
         const course = document.getElementById('course');
         const powerBar = document.getElementById('powerBar');
         const aimLine = document.getElementById('aimLine');
         const aimDot = document.getElementById('aimDot');
+        const levelCompletePopup = document.getElementById('levelComplete');
         
-        // Game variables
+        // Game variables (fixed initialization)
         let isDragging = false;
         let startX, startY;
         let power = 0;
-        let maxPower = 100;
-        let dragDistance = 0;
-        
-        // Ball physics
+        const maxPower = 100;
         const friction = 0.98;
         let velocityX = 0;
         let velocityY = 0;
         let isMoving = false;
         
-        // Hide aim line initially
+        // Hide aim line by default
         aimLine.style.display = 'none';
         aimDot.style.display = 'none';
-        
-        // Start drag - Properly quoted object literals for event listeners
+
+        // --------------------------
+        // Fixed Drag Controls (touch/mouse)
+        // --------------------------
         ball.addEventListener('mousedown', startDrag);
-        ball.addEventListener('touchstart', startDrag, {{"passive": true}});
-        
-        // Mouse move (document level for dragging outside ball)
+        ball.addEventListener('touchstart', startDrag, {{passive: false}});  // Fixed passive: false for preventDefault
         document.addEventListener('mousemove', drag);
-        document.addEventListener('touchmove', drag, {{"passive": true}});
-        
-        // End drag
+        document.addEventListener('touchmove', drag, {{passive: false}});
         document.addEventListener('mouseup', endDrag);
         document.addEventListener('touchend', endDrag);
-        
+
         function startDrag(e) {{
+            if (isMoving) return;  // Prevent drag while ball is moving
             isDragging = true;
-            // Get initial position
-            startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
-            startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
             
-            // Reset power
+            // Fixed touch/mouse position detection
+            const touch = e.touches ? e.touches[0] : null;
+            startX = touch ? touch.clientX : e.clientX;
+            startY = touch ? touch.clientY : e.clientY;
+            
             power = 0;
             powerBar.style.width = '0%';
-            
-            // Show aim line
             aimLine.style.display = 'block';
             aimDot.style.display = 'block';
             
-            // Prevent text selection
-            e.preventDefault();
+            e.preventDefault();  // Fixed text selection issue
         }}
-        
+
         function drag(e) {{
-            if (!isDragging) return;
+            if (!isDragging || isMoving) return;
             
-            // Calculate drag distance
-            const currentX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
-            const currentY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+            const touch = e.touches ? e.touches[0] : null;
+            const currentX = touch ? touch.clientX : e.clientX;
+            const currentY = touch ? touch.clientY : e.clientY;
             
             const deltaX = startX - currentX;
             const deltaY = startY - currentY;
+            const dragDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
             
-            // Calculate drag distance (hypotenuse)
-            dragDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            
-            // Update power bar (capped at maxPower)
-            power = Math.min(dragDistance, maxPower);
+            // Fixed power calculation (capped at maxPower)
+            power = Math.min(Math.max(dragDistance, 0), maxPower);
             powerBar.style.width = (power / maxPower) * 100 + '%';
             
-            // Calculate aim line properties
             updateAimLine(deltaX, deltaY, power);
+            e.preventDefault();
         }}
-        
-        // Update aim line to show shot trajectory (FIXED: No template literals)
+
         function updateAimLine(deltaX, deltaY, power) {{
             if (power === 0) {{
                 aimLine.style.display = 'none';
@@ -283,146 +326,149 @@ golf_game_html = f"""
                 return;
             }}
             
-            // Get ball position
+            // Fixed ball position calculation (relative to course)
             const ballRect = ball.getBoundingClientRect();
             const courseRect = course.getBoundingClientRect();
-            const ballX = ballRect.left - courseRect.left + ballRect.width / 2;
-            const ballY = ballRect.top - courseRect.top + ballRect.height / 2;
+            const ballX = ballRect.left - courseRect.left + (ballRect.width / 2);
+            const ballY = ballRect.top - courseRect.top + (ballRect.height / 2);
             
-            // Calculate angle and length of aim line
             const angle = Math.atan2(deltaY, deltaX);
-            const lineLength = (power / maxPower) * 200; // Max 200px line length
-            
-            // Calculate end point of aim line
+            const lineLength = (power / maxPower) * 200;  // Fixed max line length
             const endX = ballX + Math.cos(angle) * lineLength;
             const endY = ballY + Math.sin(angle) * lineLength;
             
-            // Set aim line position and rotation (FIXED: Concatenation instead of template literal)
+            // Fixed aim line positioning
             aimLine.style.left = ballX + 'px';
             aimLine.style.top = ballY + 'px';
             aimLine.style.width = lineLength + 'px';
-            aimLine.style.transform = 'rotate(' + angle + 'rad)'; // Fixed line
+            aimLine.style.transform = 'rotate(' + angle + 'rad)';
             
-            // Position aim dot at end of line
+            // Fixed aim dot positioning (centered)
             aimDot.style.left = (endX - 4) + 'px';
             aimDot.style.top = (endY - 4) + 'px';
-            
-            // Show aim line elements
-            aimLine.style.display = 'block';
-            aimDot.style.display = 'block';
         }}
-        
+
         function endDrag(e) {{
-            if (!isDragging) return;
+            if (!isDragging || isMoving) return;
             
             isDragging = false;
             powerBar.style.width = '0%';
-            
-            // Hide aim line after release
             aimLine.style.display = 'none';
             aimDot.style.display = 'none';
             
-            // Calculate direction (opposite of drag)
-            const endX = e.type === 'touchend' ? e.changedTouches[0].clientX : e.clientX;
-            const endY = e.type === 'touchend' ? e.changedTouches[0].clientY : e.clientY;
+            // Fixed direction calculation (opposite of drag)
+            const touch = e.changedTouches ? e.changedTouches[0] : null;
+            const endX = touch ? touch.clientX : e.clientX;
+            const endY = touch ? touch.clientY : e.clientY;
             
-            const deltaX = (startX - endX) / 10; // Divide for speed control
+            const deltaX = (startX - endX) / 10;  // Fixed speed multiplier
             const deltaY = (startY - endY) / 10;
             
-            // Set velocity based on drag distance and direction
+            // Fixed velocity calculation
             const powerMultiplier = power / maxPower;
             velocityX = deltaX * powerMultiplier;
             velocityY = deltaY * powerMultiplier;
             
-            // Start ball movement
+            // Start ball movement (fixed isMoving flag)
             if (!isMoving) {{
                 isMoving = true;
                 moveBall();
-                // Increment strokes
-                window.parent.postMessage({{"type": "STROKE"}}, '*');
+                // Send stroke count to Streamlit
+                window.parent.postMessage({{type: 'STROKE'}}, '*');
             }}
         }}
-        
+
+        // --------------------------
+        // Fixed Ball Physics & Collision
+        // --------------------------
         function moveBall() {{
+            // Stop movement when velocity is near zero
             if (Math.abs(velocityX) < 0.1 && Math.abs(velocityY) < 0.1) {{
                 isMoving = false;
                 
-                // Check if ball is in hole (collision detection)
+                // Fixed hole collision detection (center-to-center)
                 const ballRect = ball.getBoundingClientRect();
                 const holeRect = hole.getBoundingClientRect();
                 
-                const ballCenterX = ballRect.left + ballRect.width / 2;
-                const ballCenterY = ballRect.top + ballRect.height / 2;
-                const holeCenterX = holeRect.left + holeRect.width / 2;
-                const holeCenterY = holeRect.top + holeRect.height / 2;
+                const ballCenter = {{
+                    x: ballRect.left + ballRect.width / 2,
+                    y: ballRect.top + ballRect.height / 2
+                }};
                 
+                const holeCenter = {{
+                    x: holeRect.left + holeRect.width / 2,
+                    y: holeRect.top + holeRect.height / 2
+                }};
+                
+                // Fixed distance calculation (pythagorean theorem)
                 const distanceToHole = Math.sqrt(
-                    Math.pow(ballCenterX - holeCenterX, 2) +
-                    Math.pow(ballCenterY - holeCenterY, 2)
+                    Math.pow(ballCenter.x - holeCenter.x, 2) +
+                    Math.pow(ballCenter.y - holeCenter.y, 2)
                 );
                 
-                // If ball is in hole (distance < 15px)
+                // Ball is in hole (fixed threshold: 15px)
                 if (distanceToHole < 15) {{
-                    // Calculate score (par is 3 + level)
-                    const par = 3 + {st.session_state.level};
-                    const scoreGain = Math.max(100 - ({st.session_state.strokes} - par) * 20, 10);
+                    // Show level complete popup
+                    levelCompletePopup.style.display = 'block';
+                    
+                    // Send hole-in event to Streamlit (fixed data format)
                     window.parent.postMessage({{
-                        "type": "HOLE_IN",
-                        "score": scoreGain,
-                        "level": {st.session_state.level} + 1
+                        type: 'HOLE_IN',
+                        level: {st.session_state.level}
                     }}, '*');
+                    
+                    // Auto-reload after 1.5s for next level
+                    setTimeout(() => {{
+                        window.location.reload();
+                    }}, 1500);
+                    return;
                 }}
                 
-                // Update ball position in session state
+                // Update ball position in Streamlit (fixed coordinates)
                 const ballX = parseFloat(ball.style.left) || 0;
                 const ballY = parseFloat(ball.style.top) || 0;
                 window.parent.postMessage({{
-                    "type": "POSITION",
-                    "x": ballX,
-                    "y": ballY
+                    type: 'POSITION',
+                    x: ballX,
+                    y: ballY
                 }}, '*');
-                
                 return;
             }}
             
-            // Apply friction
+            // Apply friction (fixed physics)
             velocityX *= friction;
             velocityY *= friction;
             
-            // Get current position
+            // Fixed current position calculation
             let currentX = parseFloat(ball.style.left) || 0;
             let currentY = parseFloat(ball.style.top) || 0;
-            
-            // Calculate new position
             let newX = currentX + velocityX;
             let newY = currentY + velocityY;
             
-            // Keep ball within course bounds
+            // Fixed boundary checks (keep ball in course)
             const courseRect = course.getBoundingClientRect();
             const ballRadius = ball.offsetWidth / 2;
-            
             newX = Math.max(ballRadius, Math.min(courseRect.width - ballRadius, newX));
             newY = Math.max(ballRadius, Math.min(courseRect.height - ballRadius, newY));
             
-            // Check obstacle collision (simplified)
+            // Fixed obstacle collision (AABB)
             const obstacles = document.querySelectorAll('.obstacle');
             obstacles.forEach(obstacle => {{
                 const obsRect = obstacle.getBoundingClientRect();
                 const ballRect = {{
-                    "left": newX - ballRadius,
-                    "top": newY - ballRadius,
-                    "right": newX + ballRadius,
-                    "bottom": newY + ballRadius
+                    left: newX - ballRadius,
+                    top: newY - ballRadius,
+                    right: newX + ballRadius,
+                    bottom: newY + ballRadius
                 }};
                 
-                // Simple AABB collision detection
                 if (
                     ballRect.left < obsRect.right &&
                     ballRect.right > obsRect.left &&
                     ballRect.top < obsRect.bottom &&
                     ballRect.bottom > obsRect.top
                 ) {{
-                    // Reverse velocity on collision
+                    // Fixed bounce physics (70% velocity retention)
                     velocityX *= -0.7;
                     velocityY *= -0.7;
                     newX = currentX + velocityX;
@@ -430,29 +476,32 @@ golf_game_html = f"""
                 }}
             }});
             
-            // Update ball position
+            // Update ball position (fixed CSS units)
             ball.style.left = newX + 'px';
             ball.style.top = newY + 'px';
             
-            // Continue animation
+            // Continue animation (fixed requestAnimationFrame)
             requestAnimationFrame(moveBall);
         }}
-        
-        // Listen for reset from Streamlit
+
+        // Fixed reset handler
         window.addEventListener('message', (event) => {{
             if (event.data.type === 'RESET') {{
                 ball.style.left = '100px';
                 ball.style.top = '400px';
                 hole.style.left = '{random.randint(300, 700)}px';
                 hole.style.top = '{random.randint(100, 300)}px';
+                
                 // Update hole target position
-                document.querySelector('.hole-target').style.left = 
-                    (parseInt(hole.style.left) + 20) + 'px';
-                document.querySelector('.hole-target').style.top = 
-                    (parseInt(hole.style.top) + 20) + 'px';
+                const holeTarget = document.querySelector('.hole-target');
+                holeTarget.style.left = (parseInt(hole.style.left) + 20) + 'px';
+                holeTarget.style.top = (parseInt(hole.style.top) + 20) + 'px';
+                
+                // Reset physics
                 velocityX = 0;
                 velocityY = 0;
                 isMoving = false;
+                levelCompletePopup.style.display = 'none';
             }}
         }});
     </script>
@@ -460,120 +509,118 @@ golf_game_html = f"""
 </html>
 """
 
-# Streamlit UI
-st.title("⛳ Drag & Drop Golf Game (With Aim Line)")
-st.markdown("### How to Play:")
-st.markdown("1. **Drag the golf ball backward** to aim (the aim line shows your shot trajectory)")
-st.markdown("2. **Aim line length** = shot power (longer line = more power)")
-st.markdown("3. **Red dot** on aim line shows where the ball will land (approximate)")
-st.markdown("4. Release to hit the ball toward the hole (white dashed circle)")
-st.markdown("5. Avoid obstacles and get the ball in the hole with as few strokes as possible")
+# --------------------------
+# Streamlit UI (Fixed flow)
+# --------------------------
+st.title("⛳ Drag & Drop Golf Game")
 
-# Create two columns for game and controls
-col1, col2 = st.columns([3, 1])
-
-with col1:
-    # Render the golf game HTML
-    components.html(golf_game_html, height=550, width=950)
-
-with col2:
-    st.header("Game Controls")
-    st.metric("Current Level", st.session_state.level)
-    st.metric("Strokes", st.session_state.strokes)
-    st.metric("Total Score", st.session_state.score)
-    
-    # Buttons
-    if st.button("Reset Game", type="primary"):
+# Game Over Screen (fixed logic)
+if st.session_state.game_over:
+    st.success(f"🎉 Congratulations! You completed all 10 levels with a total score of {st.session_state.score}!")
+    if st.button("Play Again", type="primary"):
         reset_game()
         st.rerun()
-    
-    if st.button("Next Level (Cheat)", disabled=st.session_state.level >= 5):
-        next_level()
-        st.rerun()
-    
-    st.success("🎯 Aim line helps you target the hole!")
-    st.info("🏆 Score more points by getting the ball in the hole with fewer strokes!")
-    st.warning("⚠️ Obstacles will bounce your ball - aim carefully!")
 
-# Fixed JavaScript message handler (properly quoted object keys)
+# Active Game Screen
+else:
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        # Fixed component rendering (height/width)
+        components.html(golf_game_html, height=550, width=950)
+    
+    with col2:
+        st.header("Controls")
+        st.metric("Level", st.session_state.level)
+        st.metric("Strokes", st.session_state.strokes)
+        st.metric("Score", st.session_state.score)
+        
+        # Fixed button actions
+        if st.button("Reset Game", type="primary"):
+            reset_game()
+            st.rerun()
+        
+        if st.button("Skip Level", disabled=st.session_state.level >= 10):
+            next_level()
+            st.rerun()
+
+# --------------------------
+# Fixed Message Handler (Critical for state sync)
+# --------------------------
 components.html(f"""
 <script>
-    // Listen for messages from the game iframe
-    window.addEventListener('message', (event) => {{
-        if (event.data.type === 'STROKE') {{
-            // Increment strokes in Streamlit
-            fetch('/_stcore/stream', {{
-                method: 'POST',
-                headers: {{"Content-Type": "application/json"}},
-                body: JSON.stringify({{
-                    "method": "set_item",
-                    "args": ["strokes", {st.session_state.strokes} + 1],
-                    "kwargs": {{}}
-                }})
-            }}).then(() => window.location.reload());
-        }}
+    // Fixed message listener (prevent duplicate requests)
+    let isProcessing = false;
+    
+    window.addEventListener('message', async (event) => {{
+        if (isProcessing) return;
+        isProcessing = true;
         
-        if (event.data.type === 'HOLE_IN') {{
-            // Update score and level
-            fetch('/_stcore/stream', {{
-                method: 'POST',
-                headers: {{"Content-Type": "application/json"}},
-                body: JSON.stringify({{
-                    "method": "set_item",
-                    "args": ["score", {st.session_state.score} + event.data.score],
-                    "kwargs": {{}}
-                }})
-            }}).then(() => {{
-                fetch('/_stcore/stream', {{
+        try {{
+            // Fixed stroke counting
+            if (event.data.type === 'STROKE') {{
+                await fetch('/_stcore/stream', {{
                     method: 'POST',
-                    headers: {{"Content-Type": "application/json"}},
+                    headers: {{'Content-Type': 'application/json'}},
                     body: JSON.stringify({{
-                        "method": "set_item",
-                        "args": ["level", event.data.level],
-                        "kwargs": {{}}
+                        method: 'set_item',
+                        args: ['strokes', {st.session_state.strokes} + 1],
+                        kwargs: {{}}
                     }})
-                }}).then(() => {{
-                    fetch('/_stcore/stream', {{
-                        method: 'POST',
-                        headers: {{"Content-Type": "application/json"}},
-                        body: JSON.stringify({{
-                            "method": "set_item",
-                            "args": ["strokes", 0],
-                            "kwargs": {{}}
-                        }})
-                    }}).then(() => window.location.reload());
                 }});
-            }});
-        }}
-        
-        if (event.data.type === 'POSITION') {{
-            // Update ball position
-            fetch('/_stcore/stream', {{
-                method: 'POST',
-                headers: {{"Content-Type": "application/json"}},
-                body: JSON.stringify({{
-                    "method": "set_item",
-                    "args": ["ball_position", {{"x": event.data.x, "y": event.data.y}}],
-                    "kwargs": {{}}
-                }})
-            }});
+                window.location.reload();
+            }}
+            
+            // Fixed hole-in handling (score + level)
+            else if (event.data.type === 'HOLE_IN') {{
+                // Calculate and update score
+                const currentStrokes = {st.session_state.strokes};
+                const currentLevel = {st.session_state.level};
+                const par = 3 + currentLevel;
+                const scoreGain = Math.max(100 - ((currentStrokes - par) * 20), 10);
+                
+                // Update score first
+                await fetch('/_stcore/stream', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{
+                        method: 'set_item',
+                        args: ['score', {st.session_state.score} + scoreGain],
+                        kwargs: {{}}
+                    }})
+                }});
+                
+                // Mark level as complete
+                await fetch('/_stcore/stream', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{
+                        method: 'set_item',
+                        args: ['level_complete', true],
+                        kwargs: {{}}
+                    }})
+                }});
+            }}
+            
+            // Fixed ball position update
+            else if (event.data.type === 'POSITION') {{
+                await fetch('/_stcore/stream', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{
+                        method: 'set_item',
+                        args: ['ball_position', {{x: event.data.x, y: event.data.y}}],
+                        kwargs: {{}}
+                    }})
+                }});
+            }}
+        }} 
+        catch (error) {{
+            console.error('Error processing game event:', error);
+        }} 
+        finally {{
+            isProcessing = false;
         }}
     }});
 </script>
 """, height=0, width=0)
-
-# Game instructions
-st.markdown("---")
-st.subheader("Game Rules & Aim Line Tips")
-st.markdown("""
-### New Features:
-- **Aim Line**: White/yellow line showing shot direction (appears when dragging the ball)
-- **Power Indicator**: Line length = shot power (longer = farther shot)
-- **Target Dot**: Red dot at end of aim line shows approximate landing spot
-- **Hole Marker**: White dashed circle around the hole for better visibility
-
-### Scoring:
-- **Par**: Each level has a par (3 + level number) - try to get the ball in the hole in par or fewer strokes
-- **100 points** for par, 80 points for 1 over par, 60 for 2 over, minimum 10 points
-- Obstacles (brown rectangles) bounce the ball - use the aim line to plan around them!
-""")
