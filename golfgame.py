@@ -45,7 +45,7 @@ def next_level():
         "y": random.randint(50, 350)
     }
 
-# HTML/CSS/JS for the golf game
+# Fixed HTML/CSS/JS for the golf game (properly escaped JS syntax)
 golf_game_html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -175,13 +175,13 @@ golf_game_html = f"""
         let velocityY = 0;
         let isMoving = false;
         
-        // Start drag
+        // Start drag - FIXED: Properly quoted object literals for event listeners
         ball.addEventListener('mousedown', startDrag);
-        ball.addEventListener('touchstart', startDrag, {passive: true});
+        ball.addEventListener('touchstart', startDrag, {{"passive": true}});
         
         // Mouse move (document level for dragging outside ball)
         document.addEventListener('mousemove', drag);
-        document.addEventListener('touchmove', drag, {passive: true});
+        document.addEventListener('touchmove', drag, {{"passive": true}});
         
         // End drag
         document.addEventListener('mouseup', endDrag);
@@ -242,7 +242,7 @@ golf_game_html = f"""
                 isMoving = true;
                 moveBall();
                 // Increment strokes
-                window.parent.postMessage({{type: 'STROKE'}}, '*');
+                window.parent.postMessage({{"type": "STROKE"}}, '*');
             }}
         }}
         
@@ -270,9 +270,9 @@ golf_game_html = f"""
                     const par = 3 + {st.session_state.level};
                     const scoreGain = Math.max(100 - ({st.session_state.strokes} - par) * 20, 10);
                     window.parent.postMessage({{
-                        type: 'HOLE_IN',
-                        score: scoreGain,
-                        level: {st.session_state.level} + 1
+                        "type": "HOLE_IN",
+                        "score": scoreGain,
+                        "level": {st.session_state.level} + 1
                     }}, '*');
                 }}
                 
@@ -280,9 +280,9 @@ golf_game_html = f"""
                 const ballX = parseFloat(ball.style.left) || 0;
                 const ballY = parseFloat(ball.style.top) || 0;
                 window.parent.postMessage({{
-                    type: 'POSITION',
-                    x: ballX,
-                    y: ballY
+                    "type": "POSITION",
+                    "x": ballX,
+                    "y": ballY
                 }}, '*');
                 
                 return;
@@ -312,10 +312,10 @@ golf_game_html = f"""
             obstacles.forEach(obstacle => {{
                 const obsRect = obstacle.getBoundingClientRect();
                 const ballRect = {{
-                    left: newX - ballRadius,
-                    top: newY - ballRadius,
-                    right: newX + ballRadius,
-                    bottom: newY + ballRadius
+                    "left": newX - ballRadius,
+                    "top": newY - ballRadius,
+                    "right": newX + ballRadius,
+                    "bottom": newY + ballRadius
                 }};
                 
                 // Simple AABB collision detection
@@ -391,72 +391,72 @@ with col2:
     st.info("🏆 Score more points by getting the ball in the hole with fewer strokes!")
     st.warning("⚠️ Obstacles will bounce your ball - aim carefully!")
 
-# JavaScript to handle messages from the game
-components.html("""
+# Fixed JavaScript message handler (properly quoted object keys)
+components.html(f"""
 <script>
     // Listen for messages from the game iframe
-    window.addEventListener('message', (event) => {
-        if (event.data.type === 'STROKE') {
+    window.addEventListener('message', (event) => {{
+        if (event.data.type === 'STROKE') {{
             // Increment strokes in Streamlit
-            fetch('/_stcore/stream', {
+            fetch('/_stcore/stream', {{
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    'method': 'set_item',
-                    'args': ['strokes', %s + 1],
-                    'kwargs': {}
-                })
-            }).then(() => window.location.reload());
-        }
+                headers: {{"Content-Type": "application/json"}},
+                body: JSON.stringify({{
+                    "method": "set_item",
+                    "args": ["strokes", {st.session_state.strokes} + 1],
+                    "kwargs": {{}}
+                }})
+            }}).then(() => window.location.reload());
+        }}
         
-        if (event.data.type === 'HOLE_IN') {
+        if (event.data.type === 'HOLE_IN') {{
             // Update score and level
-            fetch('/_stcore/stream', {
+            fetch('/_stcore/stream', {{
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    'method': 'set_item',
-                    'args': ['score', %s + event.data.score],
-                    'kwargs': {}
-                })
-            }).then(() => {
-                fetch('/_stcore/stream', {
+                headers: {{"Content-Type": "application/json"}},
+                body: JSON.stringify({{
+                    "method": "set_item",
+                    "args": ["score", {st.session_state.score} + event.data.score],
+                    "kwargs": {{}}
+                }})
+            }}).then(() => {{
+                fetch('/_stcore/stream', {{
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        'method': 'set_item',
-                        'args': ['level', event.data.level],
-                        'kwargs': {}
-                    })
-                }).then(() => {
-                    fetch('/_stcore/stream', {
+                    headers: {{"Content-Type": "application/json"}},
+                    body: JSON.stringify({{
+                        "method": "set_item",
+                        "args": ["level", event.data.level],
+                        "kwargs": {{}}
+                    }})
+                }}).then(() => {{
+                    fetch('/_stcore/stream', {{
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            'method': 'set_item',
-                            'args': ['strokes', 0],
-                            'kwargs': {}
-                        })
-                    }).then(() => window.location.reload());
-                });
-            });
-        }
+                        headers: {{"Content-Type": "application/json"}},
+                        body: JSON.stringify({{
+                            "method": "set_item",
+                            "args": ["strokes", 0],
+                            "kwargs": {{}}
+                        }})
+                    }}).then(() => window.location.reload());
+                }});
+            }});
+        }}
         
-        if (event.data.type === 'POSITION') {
+        if (event.data.type === 'POSITION') {{
             // Update ball position
-            fetch('/_stcore/stream', {
+            fetch('/_stcore/stream', {{
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    'method': 'set_item',
-                    'args': ['ball_position', {x: event.data.x, y: event.data.y}],
-                    'kwargs': {}
-                })
-            });
-        }
-    });
+                headers: {{"Content-Type": "application/json"}},
+                body: JSON.stringify({{
+                    "method": "set_item",
+                    "args": ["ball_position", {{"x": event.data.x, "y": event.data.y}}],
+                    "kwargs": {{}}
+                }})
+            }});
+        }}
+    }});
 </script>
-""" % (st.session_state.strokes, st.session_state.score), height=0, width=0)
+""", height=0, width=0)
 
 # Game instructions
 st.markdown("---")
