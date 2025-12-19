@@ -45,7 +45,7 @@ def next_level():
         "y": random.randint(50, 350)
     }
 
-# Fixed HTML/CSS/JS with AIM LINE feature
+# Fully fixed HTML/CSS/JS with AIM LINE (no template literals)
 golf_game_html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -224,7 +224,7 @@ golf_game_html = f"""
         aimLine.style.display = 'none';
         aimDot.style.display = 'none';
         
-        // Start drag - FIXED: Properly quoted object literals for event listeners
+        // Start drag - Properly quoted object literals for event listeners
         ball.addEventListener('mousedown', startDrag);
         ball.addEventListener('touchstart', startDrag, {{"passive": true}});
         
@@ -275,7 +275,7 @@ golf_game_html = f"""
             updateAimLine(deltaX, deltaY, power);
         }}
         
-        // Update aim line to show shot trajectory
+        // Update aim line to show shot trajectory (FIXED: No template literals)
         function updateAimLine(deltaX, deltaY, power) {{
             if (power === 0) {{
                 aimLine.style.display = 'none';
@@ -297,15 +297,15 @@ golf_game_html = f"""
             const endX = ballX + Math.cos(angle) * lineLength;
             const endY = ballY + Math.sin(angle) * lineLength;
             
-            // Set aim line position and rotation
+            // Set aim line position and rotation (FIXED: Concatenation instead of template literal)
             aimLine.style.left = ballX + 'px';
             aimLine.style.top = ballY + 'px';
             aimLine.style.width = lineLength + 'px';
-            aimLine.style.transform = `rotate(${angle}rad)`;
+            aimLine.style.transform = 'rotate(' + angle + 'rad)'; // Fixed line
             
             // Position aim dot at end of line
-            aimDot.style.left = endX - 4 + 'px';
-            aimDot.style.top = endY - 4 + 'px';
+            aimDot.style.left = (endX - 4) + 'px';
+            aimDot.style.top = (endY - 4) + 'px';
             
             // Show aim line elements
             aimLine.style.display = 'block';
