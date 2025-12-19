@@ -5,7 +5,7 @@ import math
 
 # Set page config
 st.set_page_config(
-    page_title="Progressive Golf Game",
+    page_title="Auto-Skip Golf Game",
     page_icon="⛳",
     layout="wide"
 )
@@ -21,8 +21,10 @@ def init_session_state():
         "ball_position": {"x": 100, "y": 400},
         "hole_position": {"x": random.randint(300, 700), "y": random.randint(100, 300)},
         "game_over": False,
-        "level_complete": False,
-        # Difficulty progression variables
+        # Auto-level variables
+        "auto_advance": False,
+        "advance_delay": 2000,  # 2 second delay before auto-skipping
+        # Difficulty progression
         "obstacle_count": 1,
         "obstacle_size_multiplier": 1.0,
         "friction": 0.98,
@@ -38,29 +40,24 @@ def init_session_state():
 init_session_state()
 
 # --------------------------
-# Progressive Difficulty Logic
+# Auto-Level Progression (No manual input needed)
 # --------------------------
 def calculate_difficulty(level):
     """Calculate progressive difficulty based on current level"""
-    # Exponential difficulty scaling
     difficulty_factor = math.pow(1.2, level - 1)
     
-    # Update difficulty parameters
-    st.session_state.obstacle_count = min(1 + (level - 1) * 2, 15)  # 1,3,5... up to 15 obstacles
-    st.session_state.obstacle_size_multiplier = 1.0 + (level - 1) * 0.15  # 1x → 2.5x at lvl 10
-    st.session_state.friction = max(0.90, 0.98 - (level - 1) * 0.008)  # 0.98 → 0.90 (faster ball stop)
-    st.session_state.aim_line_max_length = max(80, 200 - (level - 1) * 12)  # 200px → 80px (harder aim)
-    st.session_state.power_multiplier = max(8, 10 - (level - 1) * 0.2)  # 10 → 8 (less power control)
-    st.session_state.hole_min_distance = 200 + (level - 1) * 50  # Min distance from start → 200→700px
+    st.session_state.obstacle_count = min(1 + (level - 1) * 2, 15)
+    st.session_state.obstacle_size_multiplier = 1.0 + (level - 1) * 0.15
+    st.session_state.friction = max(0.90, 0.98 - (level - 1) * 0.008)
+    st.session_state.aim_line_max_length = max(80, 200 - (level - 1) * 12)
+    st.session_state.power_multiplier = max(8, 10 - (level - 1) * 0.2)
+    st.session_state.hole_min_distance = 200 + (level - 1) * 50
 
 def generate_harder_hole_position(level):
-    """Generate increasingly difficult hole positions (farther, more edge positions)"""
-    # Higher levels → hole closer to edges and farther from start
-    edge_bias = min(0.8, (level - 1) * 0.1)  # 0 → 0.8 (more edge positions)
+    """Generate increasingly difficult hole positions"""
+    edge_bias = min(0.8, (level - 1) * 0.1)
     
-    # Random position with edge bias
     if random.random() < edge_bias:
-        # Edge position (top/bottom/left/right)
         edge_choice = random.choice(['top', 'bottom', 'left', 'right'])
         if edge_choice == 'top':
             x = random.randint(100, 800)
@@ -71,68 +68,64 @@ def generate_harder_hole_position(level):
         elif edge_choice == 'left':
             x = random.randint(100, 200)
             y = random.randint(50, 450)
-        else:  # right
+        else:
             x = random.randint(700, 800)
             y = random.randint(50, 450)
     else:
-        # Regular position but farther from start
-        x = random.randint(
-            int(st.session_state.hole_min_distance), 
-            800
-        )
+        x = random.randint(int(st.session_state.hole_min_distance), 800)
         y = random.randint(50, 450)
     
     return {"x": x, "y": y}
 
+# AUTOMATIC LEVEL ADVANCE (CORE FEATURE)
+def auto_advance_level():
+    """Automatically advance to next level with no user input"""
+    if st.session_state.auto_advance:
+        if st.session_state.level >= 20:
+            st.session_state.game_over = True
+        else:
+            # Increment level and reset state
+            st.session_state.level += 1
+            st.session_state.strokes = 0
+            st.session_state.ball_position = {"x": 100, "y": 400}
+            
+            # Generate harder hole position
+            st.session_state.hole_position = generate_harder_hole_position(st.session_state.level)
+            
+            # Update difficulty
+            calculate_difficulty(st.session_state.level)
+        
+        # Reset auto-advance flag
+        st.session_state.auto_advance = False
+        st.rerun()
+
+# Trigger auto-advance if flag is set
+if st.session_state.auto_advance:
+    auto_advance_level()
+
 def reset_game():
-    """Full reset to level 1 (easy difficulty)"""
+    """Full reset to level 1"""
     st.session_state.score = 0
     st.session_state.strokes = 0
     st.session_state.level = 1
     st.session_state.ball_position = {"x": 100, "y": 400}
     st.session_state.hole_position = generate_harder_hole_position(1)
     st.session_state.game_over = False
-    st.session_state.level_complete = False
-    # Reset difficulty parameters
+    st.session_state.auto_advance = False
     calculate_difficulty(1)
 
-def next_level():
-    """Advance to next level with increased difficulty"""
-    if st.session_state.level >= 20:  # Max level (20) → game complete
-        st.session_state.game_over = True
-        return
-    
-    # Increment level
-    st.session_state.level += 1
-    st.session_state.strokes = 0
-    st.session_state.ball_position = {"x": 100, "y": 400}
-    
-    # Generate harder hole position
-    st.session_state.hole_position = generate_harder_hole_position(st.session_state.level)
-    
-    # Update difficulty for new level
-    calculate_difficulty(st.session_state.level)
-    st.session_state.level_complete = False
-
 def calculate_score(current_strokes, level):
-    """Score with bonus for fewer strokes on harder levels"""
-    par = 3 + math.ceil(level * 0.7)  # Par increases faster (3→17 at lvl20)
-    base_score = max(100 - ((current_strokes - par) * 25), 10)  # Higher penalty for extra strokes
-    # Difficulty bonus (higher levels = more points)
+    """Score with difficulty bonus"""
+    par = 3 + math.ceil(level * 0.7)
+    base_score = max(100 - ((current_strokes - par) * 25), 10)
     difficulty_bonus = level * 10
-    total_score = base_score + difficulty_bonus
-    return total_score
-
-# Auto-advance to next level if complete
-if st.session_state.level_complete:
-    next_level()
-    st.rerun()
+    return base_score + difficulty_bonus
 
 # Calculate current difficulty
 calculate_difficulty(st.session_state.level)
 
 # --------------------------
-# Game HTML/JS with Progressive Difficulty
+# Game HTML/JS with Full Auto-Skip
 # --------------------------
 golf_game_html = f"""
 <!DOCTYPE html>
@@ -227,14 +220,14 @@ golf_game_html = f"""
             position: absolute;
             background: #795548;
             border-radius: 5px;
-            box-shadow: 0 3px 8px rgba(0,0,0,0.5);  /* Darker shadows for higher levels */
-            opacity: {min(0.95, 0.7 + (st.session_state.level * 0.01))};  /* More opaque obstacles */
+            box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+            opacity: {min(0.95, 0.7 + (st.session_state.level * 0.01))};
         }}
         
         .aim-line {{
             position: absolute;
             height: 3px;
-            background: rgba(255, 255, 255, {max(0.5, 0.7 - (st.session_state.level * 0.01))});  /* Fainter aim line */
+            background: rgba(255, 255, 255, {max(0.5, 0.7 - (st.session_state.level * 0.01))});
             border-radius: 2px;
             z-index: 8;
             transform-origin: left center;
@@ -244,7 +237,7 @@ golf_game_html = f"""
         
         .aim-dot {{
             position: absolute;
-            width: {max(4, 8 - (st.session_state.level * 0.2))}px;  /* Smaller aim dot */
+            width: {max(4, 8 - (st.session_state.level * 0.2))}px;
             height: {max(4, 8 - (st.session_state.level * 0.2))}px;
             background: rgba(255, 0, 0, {max(0.6, 0.8 - (st.session_state.level * 0.01))});
             border-radius: 50%;
@@ -254,7 +247,7 @@ golf_game_html = f"""
         
         .hole-target {{
             position: absolute;
-            width: {max(30, 50 - (st.session_state.level * 1.5))}px;  /* Smaller target marker */
+            width: {max(30, 50 - (st.session_state.level * 1.5))}px;
             height: {max(30, 50 - (st.session_state.level * 1.5))}px;
             border: 2px dashed rgba(255, 255, 255, {max(0.4, 0.6 - (st.session_state.level * 0.015))});
             border-radius: 50%;
@@ -264,31 +257,58 @@ golf_game_html = f"""
             top: {st.session_state.hole_position['y'] + 20}px;
         }}
         
-        .level-complete {{
+        /* Auto-level transition animation */
+        .level-transition {{
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.9);
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
             color: white;
-            padding: 40px 70px;
-            border-radius: 20px;
-            font-family: Arial, sans-serif;
-            font-size: 28px;
-            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             z-index: 9999;
-            text-align: center;
-            display: none;
-            animation: fadeIn 0.5s ease-in-out;
-            border: 3px solid #FFC107;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+            font-family: Arial, sans-serif;
         }}
         
-        @keyframes fadeIn {{
-            from {{ opacity: 0; transform: translate(-50%, -45%); }}
-            to {{ opacity: 1; transform: translate(-50%, -50%); }}
+        .level-transition.active {{
+            opacity: 1;
+            pointer-events: all;
         }}
         
-        /* Difficulty visual indicator */
+        .level-transition h1 {{
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #FFC107;
+        }}
+        
+        .level-transition p {{
+            font-size: 24px;
+            margin-bottom: 30px;
+        }}
+        
+        .progress-bar {{
+            width: 50%;
+            height: 10px;
+            background: #333;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 20px;
+        }}
+        
+        .progress-fill {{
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4CAF50, #FFC107);
+            transition: width {st.session_state.advance_delay / 1000}s linear;
+        }}
+        
         .difficulty-bar {{
             width: 100%;
             height: 5px;
@@ -313,7 +333,7 @@ golf_game_html = f"""
         <div class="aim-line" id="aimLine"></div>
         <div class="aim-dot" id="aimDot"></div>
         
-        <!-- Progressive obstacles (more and larger with higher levels) -->
+        <!-- Progressive obstacles -->
         {''.join([
             f'<div class="obstacle" style="width: {50 * st.session_state.obstacle_size_multiplier + random.randint(-10, 20)}px; height: {30 * st.session_state.obstacle_size_multiplier + random.randint(-5, 15)}px; left: {random.randint(150, 850)}px; top: {random.randint(50, 450)}px;"></div>'
             for _ in range(st.session_state.obstacle_count)
@@ -329,7 +349,6 @@ golf_game_html = f"""
             Score: {st.session_state.score}
         </div>
         
-        <!-- Difficulty meter -->
         <div class="difficulty-meter">
             Difficulty: {st.session_state.level}/20
             <div class="difficulty-bar">
@@ -338,11 +357,14 @@ golf_game_html = f"""
             <small>Obstacles: {st.session_state.obstacle_count}</small>
         </div>
         
-        <div class="level-complete" id="levelComplete">
-            LEVEL {st.session_state.level} COMPLETE!<br>
-            <span style="font-size: 18px; margin-top: 10px; display: block;">
-                Next Level ({st.session_state.level + 1}) - Harder!
-            </span>
+        <!-- Auto-level transition screen (no manual button) -->
+        <div class="level-transition" id="levelTransition">
+            <h1>LEVEL {st.session_state.level} COMPLETE!</h1>
+            <p>Auto-advancing to Level {st.session_state.level + 1}...</p>
+            <p style="font-size: 18px; color: #ccc;">Difficulty increased!</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
         </div>
     </div>
 
@@ -354,13 +376,15 @@ golf_game_html = f"""
         const powerBar = document.getElementById('powerBar');
         const aimLine = document.getElementById('aimLine');
         const aimDot = document.getElementById('aimDot');
-        const levelCompletePopup = document.getElementById('levelComplete');
+        const levelTransition = document.getElementById('levelTransition');
+        const progressFill = document.getElementById('progressFill');
         
-        // Progressive difficulty parameters (from Python)
+        // Progressive difficulty parameters
         const friction = {st.session_state.friction};
         const aimLineMaxLength = {st.session_state.aim_line_max_length};
         const powerMultiplier = {st.session_state.power_multiplier};
         const maxPower = 100;
+        const advanceDelay = {st.session_state.advance_delay};  // Auto-skip delay (ms)
         
         // Game variables
         let isDragging = false;
@@ -409,7 +433,6 @@ golf_game_html = f"""
             const deltaY = startY - currentY;
             const dragDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
             
-            // More sensitive power control (harder to get perfect power)
             power = Math.min(Math.max(dragDistance, 0), maxPower);
             powerBar.style.width = (power / maxPower) * 100 + '%';
             
@@ -430,7 +453,7 @@ golf_game_html = f"""
             const ballY = ballRect.top - courseRect.top + (ballRect.height / 2);
             
             const angle = Math.atan2(deltaY, deltaX);
-            const lineLength = (power / maxPower) * aimLineMaxLength;  // Shorter aim line for higher levels
+            const lineLength = (power / maxPower) * aimLineMaxLength;
             const endX = ballX + Math.cos(angle) * lineLength;
             const endY = ballY + Math.sin(angle) * lineLength;
             
@@ -455,11 +478,11 @@ golf_game_html = f"""
             const endX = touch ? touch.clientX : e.clientX;
             const endY = touch ? touch.clientY : e.clientY;
             
-            const deltaX = (startX - endX) / powerMultiplier;  // Less power control
+            const deltaX = (startX - endX) / powerMultiplier;
             const deltaY = (startY - endY) / powerMultiplier;
             
-            // More unpredictable ball movement for higher levels
-            const randomVariance = {min(0.15, 0.02 + (st.session_state.level * 0.007))};  // Random drift
+            // Random variance for harder levels
+            const randomVariance = {min(0.15, 0.02 + (st.session_state.level * 0.007))};
             const driftX = (Math.random() - 0.5) * randomVariance;
             const driftY = (Math.random() - 0.5) * randomVariance;
             
@@ -475,7 +498,7 @@ golf_game_html = f"""
         }}
 
         function moveBall() {{
-            if (Math.abs(velocityX) < 0.08 && Math.abs(velocityY) < 0.08) {{  // Harder to stop perfectly
+            if (Math.abs(velocityX) < 0.08 && Math.abs(velocityY) < 0.08) {{
                 isMoving = false;
                 
                 // Hole collision detection
@@ -497,19 +520,11 @@ golf_game_html = f"""
                     Math.pow(ballCenter.y - holeCenter.y, 2)
                 );
                 
-                // Narrower hole detection for higher levels
-                const holeThreshold = {max(12, 15 - (st.session_state.level * 0.15))};  // 15px → 12px
+                // Narrower threshold for harder levels
+                const holeThreshold = {max(12, 15 - (st.session_state.level * 0.15))};
                 if (distanceToHole < holeThreshold) {{
-                    levelCompletePopup.style.display = 'block';
-                    
-                    window.parent.postMessage({{
-                        type: 'HOLE_IN',
-                        level: {st.session_state.level}
-                    }}, '*');
-                    
-                    setTimeout(() => {{
-                        window.location.reload();
-                    }}, 2000);  // Longer delay for harder levels
+                    // Trigger auto-level transition (NO MANUAL INPUT NEEDED)
+                    triggerAutoLevelAdvance();
                     return;
                 }}
                 
@@ -524,7 +539,7 @@ golf_game_html = f"""
                 return;
             }}
             
-            // Apply friction (less friction = ball stops faster)
+            // Physics
             velocityX *= friction;
             velocityY *= friction;
             
@@ -539,7 +554,7 @@ golf_game_html = f"""
             newX = Math.max(ballRadius, Math.min(courseRect.width - ballRadius, newX));
             newY = Math.max(ballRadius, Math.min(courseRect.height - ballRadius, newY));
             
-            // Obstacle collision (harder collisions for higher levels)
+            // Obstacle collision with random bounce
             const obstacles = document.querySelectorAll('.obstacle');
             obstacles.forEach(obstacle => {{
                 const obsRect = obstacle.getBoundingClientRect();
@@ -556,12 +571,11 @@ golf_game_html = f"""
                     ballRect.top < obsRect.bottom &&
                     ballRect.bottom > obsRect.top
                 ) {{
-                    // More unpredictable bounce for higher levels
                     const bounceVariance = {min(0.3, 0.1 + (st.session_state.level * 0.01))};
                     const randomBounceX = (Math.random() - 0.5) * bounceVariance;
                     const randomBounceY = (Math.random() - 0.5) * bounceVariance;
                     
-                    velocityX = (velocityX * -0.7) + randomBounceX;  // Less predictable bounce
+                    velocityX = (velocityX * -0.7) + randomBounceX;
                     velocityY = (velocityY * -0.7) + randomBounceY;
                     newX = currentX + velocityX;
                     newY = currentY + velocityY;
@@ -572,6 +586,37 @@ golf_game_html = f"""
             ball.style.top = newY + 'px';
             
             requestAnimationFrame(moveBall);
+        }}
+
+        // --------------------------
+        // AUTO-LEVEL ADVANCE (NO MANUAL INPUT)
+        // --------------------------
+        function triggerAutoLevelAdvance() {{
+            // Show transition screen
+            levelTransition.classList.add('active');
+            
+            // Animate progress bar
+            progressFill.style.width = '100%';
+            
+            // Calculate score and send to Streamlit
+            const currentStrokes = {st.session_state.strokes};
+            const currentLevel = {st.session_state.level};
+            const par = 3 + Math.ceil(currentLevel * 0.7);
+            const baseScore = Math.max(100 - ((currentStrokes - par) * 25), 10);
+            const difficultyBonus = currentLevel * 10;
+            const totalScore = baseScore + difficultyBonus;
+            
+            // Send hole-in event to trigger auto-advance
+            window.parent.postMessage({{
+                type: 'HOLE_IN',
+                score: totalScore,
+                level: currentLevel
+            }}, '*');
+            
+            // Auto-reload after delay (triggers next level)
+            setTimeout(() => {{
+                window.location.reload();
+            }}, advanceDelay);
         }}
 
         // Reset handler
@@ -589,7 +634,8 @@ golf_game_html = f"""
                 velocityX = 0;
                 velocityY = 0;
                 isMoving = false;
-                levelCompletePopup.style.display = 'none';
+                levelTransition.classList.remove('active');
+                progressFill.style.width = '0%';
             }}
         }});
     </script>
@@ -598,22 +644,24 @@ golf_game_html = f"""
 """
 
 # --------------------------
-# Streamlit UI
+# Streamlit UI (No manual level buttons needed)
 # --------------------------
-st.title("⛳ Progressive Golf Game (Harder Levels)")
+st.title("⛳ Auto-Skip Golf Game (Progressive Difficulty)")
 
-# Game Over Screen
+# Game Over Screen (after level 20)
 if st.session_state.game_over:
     st.success(f"""
-        🎉 Congratulations! You completed all 20 levels!
+        🎉 CONGRATULATIONS!
+        You completed all 20 levels of progressive difficulty!
+        
         Final Score: {st.session_state.score}
-        You mastered the hardest difficulty!
+        You mastered the hardest challenges!
     """)
     if st.button("Play Again", type="primary"):
         reset_game()
         st.rerun()
 
-# Active Game Screen
+# Active Game Screen (no manual level buttons)
 else:
     col1, col2 = st.columns([3, 1])
     
@@ -628,23 +676,19 @@ else:
         
         # Difficulty info
         st.subheader("Current Difficulty")
-        st.write(f"🔹 Obstacles: {st.session_state.obstacle_count} (Level {st.session_state.level}: {st.session_state.obstacle_count}x)")
-        st.write(f"🔹 Friction: {st.session_state.friction:.2f} (Lower = faster stop)")
-        st.write(f"🔹 Aim Line Length: {st.session_state.aim_line_max_length}px (Shorter = harder aim)")
-        st.write(f"🔹 Hole Min Distance: {st.session_state.hole_min_distance}px (Farther = harder)")
+        st.write(f"🔹 Obstacles: {st.session_state.obstacle_count}")
+        st.write(f"🔹 Friction: {st.session_state.friction:.2f} (Faster stop)")
+        st.write(f"🔹 Aim Line Length: {st.session_state.aim_line_max_length}px")
+        st.write(f"🔹 Auto-Skip Delay: {st.session_state.advance_delay / 1000}s")
         
-        # Controls
+        # Only reset button (no skip level button)
         st.subheader("Controls")
         if st.button("Reset Game", type="primary"):
             reset_game()
             st.rerun()
-        
-        if st.button("Skip to Next Level", disabled=st.session_state.level >= 20):
-            next_level()
-            st.rerun()
 
 # --------------------------
-# Message Handler
+# Auto-Level Message Handler
 # --------------------------
 components.html(f"""
 <script>
@@ -656,6 +700,7 @@ components.html(f"""
         
         try {{
             if (event.data.type === 'STROKE') {{
+                // Increment strokes
                 await fetch('/_stcore/stream', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
@@ -669,32 +714,24 @@ components.html(f"""
             }}
             
             else if (event.data.type === 'HOLE_IN') {{
-                // Calculate score with difficulty bonus
-                const currentStrokes = {st.session_state.strokes};
-                const currentLevel = {st.session_state.level};
-                const par = 3 + Math.ceil(currentLevel * 0.7);
-                const baseScore = Math.max(100 - ((currentStrokes - par) * 25), 10);
-                const difficultyBonus = currentLevel * 10;
-                const totalScore = baseScore + difficultyBonus;
-                
                 // Update score
                 await fetch('/_stcore/stream', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
                     body: JSON.stringify({{
                         method: 'set_item',
-                        args: ['score', {st.session_state.score} + totalScore],
+                        args: ['score', {st.session_state.score} + event.data.score],
                         kwargs: {{}}
                     }})
                 }});
                 
-                // Mark level as complete
+                // Set auto-advance flag (triggers next level automatically)
                 await fetch('/_stcore/stream', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
                     body: JSON.stringify({{
                         method: 'set_item',
-                        args: ['level_complete', true],
+                        args: ['auto_advance', true],
                         kwargs: {{}}
                     }})
                 }});
